@@ -673,6 +673,13 @@ body {
   box-shadow: var(--canvas-shadow);
 }
 
+body[data-mode="versus"] #gameCanvas {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+}
+
 .board-caption {
   margin: 14px 4px 0;
   color: var(--ink-soft);
@@ -879,6 +886,43 @@ body {
   .speed-picker {
     margin-left: 0;
   }
+
+  body[data-mode="versus"] .board-frame {
+    display: flex;
+    justify-content: center;
+  }
+
+  body[data-mode="versus"] .board-caption {
+    text-align: center;
+  }
+}
+
+@media (min-width: 961px) {
+  body[data-mode="versus"] .content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-mode="versus"] .board-panel,
+  body[data-mode="versus"] .info-panel {
+    width: 100%;
+  }
+
+  body[data-mode="versus"] .board-frame,
+  body[data-mode="versus"] .board-caption,
+  body[data-mode="versus"] .mobile-controls {
+    width: 100%;
+  }
+
+  body[data-mode="versus"] .board-frame {
+    display: flex;
+    justify-content: center;
+  }
+
+  body[data-mode="versus"] .board-caption {
+    margin: 14px 0 0;
+    text-align: center;
+  }
+
 }
 
 @media (max-width: 720px) {

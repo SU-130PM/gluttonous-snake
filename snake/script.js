@@ -21,9 +21,10 @@ const padButtons = document.querySelectorAll(".pad-btn");
 const themeButtons = document.querySelectorAll(".theme-chip");
 const modeButtons = document.querySelectorAll(".mode-chip");
 
-const BOARD_SIZE = 600;
-const GRID_COUNT = 20;
-const CELL_SIZE = BOARD_SIZE / GRID_COUNT;
+const CELL_SIZE = 30;
+const GRID_ROWS = 20;
+const SINGLE_GRID_COLUMNS = 20;
+const VERSUS_GRID_COLUMNS = 32;
 const FOOD_SAFE_MARGIN = 1;
 const BEST_SCORE_KEY = "rainbow-snake-best-score";
 const THEME_STORAGE_KEY = "rainbow-snake-theme";
@@ -190,6 +191,23 @@ function sanitizeMode(modeName) {
   return modeName === "versus" ? "versus" : DEFAULT_MODE;
 }
 
+function getGridColumns() {
+  return gameMode === "versus" ? VERSUS_GRID_COLUMNS : SINGLE_GRID_COLUMNS;
+}
+
+function getBoardWidth() {
+  return getGridColumns() * CELL_SIZE;
+}
+
+function getBoardHeight() {
+  return GRID_ROWS * CELL_SIZE;
+}
+
+function syncCanvasSize() {
+  canvas.width = getBoardWidth();
+  canvas.height = getBoardHeight();
+}
+
 function createDirection(x, y) {
   return { x, y };
 }
@@ -247,13 +265,16 @@ function createPlayer(config) {
 }
 
 function createSinglePlayer() {
+  const centerX = Math.floor(getGridColumns() / 2);
+  const centerY = Math.floor(GRID_ROWS / 2);
+
   return createPlayer({
     id: "A",
     label: "玩家",
     segments: [
-      { x: 10, y: 10 },
-      { x: 9, y: 10 },
-      { x: 8, y: 10 }
+      { x: centerX, y: centerY },
+      { x: centerX - 1, y: centerY },
+      { x: centerX - 2, y: centerY }
     ],
     direction: vectorRight,
     skinKey: currentThemeName
@@ -261,14 +282,20 @@ function createSinglePlayer() {
 }
 
 function createVersusPlayers() {
+  const gridColumns = getGridColumns();
+  const topLane = Math.max(4, Math.floor(GRID_ROWS / 2) - 4);
+  const bottomLane = Math.min(GRID_ROWS - 5, Math.floor(GRID_ROWS / 2) + 3);
+  const leftStart = Math.max(5, Math.floor(gridColumns * 0.18));
+  const rightStart = gridColumns - leftStart - 1;
+
   return [
     createPlayer({
       id: "A",
       label: "A",
       segments: [
-        { x: 4, y: 6 },
-        { x: 3, y: 6 },
-        { x: 2, y: 6 }
+        { x: leftStart, y: topLane },
+        { x: leftStart - 1, y: topLane },
+        { x: leftStart - 2, y: topLane }
       ],
       direction: vectorRight,
       skinKey: playerSkinChoices.A
@@ -277,9 +304,9 @@ function createVersusPlayers() {
       id: "B",
       label: "B",
       segments: [
-        { x: 15, y: 13 },
-        { x: 16, y: 13 },
-        { x: 17, y: 13 }
+        { x: rightStart, y: bottomLane },
+        { x: rightStart + 1, y: bottomLane },
+        { x: rightStart + 2, y: bottomLane }
       ],
       direction: vectorLeft,
       skinKey: playerSkinChoices.B
@@ -349,6 +376,8 @@ function syncModeUi() {
     button.setAttribute("aria-pressed", String(isActive));
   });
 
+  document.body.dataset.mode = gameMode;
+  syncCanvasSize();
   playerSetupEl.hidden = gameMode !== "versus";
   mobileControlsEl.hidden = gameMode !== "single";
   updateTips();
@@ -565,9 +594,10 @@ function getTargetFoodCount() {
 function generateFood(excludedFoods = foods) {
   const availableCells = [];
   const innerCells = [];
+  const gridColumns = getGridColumns();
 
-  for (let y = 0; y < GRID_COUNT; y += 1) {
-    for (let x = 0; x < GRID_COUNT; x += 1) {
+  for (let y = 0; y < GRID_ROWS; y += 1) {
+    for (let x = 0; x < gridColumns; x += 1) {
       const occupiedBySnake = players.some((player) =>
         player.segments.some((segment) => segment.x === x && segment.y === y)
       );
@@ -582,9 +612,9 @@ function generateFood(excludedFoods = foods) {
 
       const insideSafeZone =
         x >= FOOD_SAFE_MARGIN &&
-        x < GRID_COUNT - FOOD_SAFE_MARGIN &&
+        x < gridColumns - FOOD_SAFE_MARGIN &&
         y >= FOOD_SAFE_MARGIN &&
-        y < GRID_COUNT - FOOD_SAFE_MARGIN;
+        y < GRID_ROWS - FOOD_SAFE_MARGIN;
 
       if (insideSafeZone) {
         innerCells.push(cell);
@@ -642,6 +672,7 @@ function tick() {
   const nextHeads = new Map();
   const willEatFood = new Map();
   const losers = new Set();
+  const gridColumns = getGridColumns();
 
   players.forEach((player) => {
     player.direction = createDirection(player.nextDirection.x, player.nextDirection.y);
@@ -662,9 +693,9 @@ function tick() {
     const nextHead = nextHeads.get(player.id);
     const hitWall =
       nextHead.x < 0 ||
-      nextHead.x >= GRID_COUNT ||
+      nextHead.x >= gridColumns ||
       nextHead.y < 0 ||
-      nextHead.y >= GRID_COUNT;
+      nextHead.y >= GRID_ROWS;
 
     if (hitWall) {
       losers.add(player.id);
@@ -786,8 +817,10 @@ function roundRectPath(x, y, width, height, radius) {
 }
 
 function drawBackground() {
-  for (let y = 0; y < GRID_COUNT; y += 1) {
-    for (let x = 0; x < GRID_COUNT; x += 1) {
+  const gridColumns = getGridColumns();
+
+  for (let y = 0; y < GRID_ROWS; y += 1) {
+    for (let x = 0; x < gridColumns; x += 1) {
       if ((x + y) % 2 !== 0) {
         continue;
       }
@@ -937,36 +970,43 @@ function getOverlaySubtitleLines(subtitle, maxWidth) {
 }
 
 function drawOverlay(title, subtitle) {
+  const boardWidth = canvas.width;
+  const boardHeight = canvas.height;
+  const overlayWidth = 380;
+  const overlayHeight = 170;
+  const overlayX = (boardWidth - overlayWidth) / 2;
+  const overlayY = (boardHeight - overlayHeight) / 2;
+
   ctx.save();
   ctx.fillStyle = currentTheme.overlayBg;
-  roundRectPath(110, 208, 380, 170, 28);
+  roundRectPath(overlayX, overlayY, overlayWidth, overlayHeight, 28);
   ctx.fill();
 
   ctx.strokeStyle = currentTheme.overlayBorder;
   ctx.lineWidth = 1;
-  roundRectPath(110, 208, 380, 170, 28);
+  roundRectPath(overlayX, overlayY, overlayWidth, overlayHeight, 28);
   ctx.stroke();
 
   ctx.fillStyle = currentTheme.overlayTitle;
   ctx.font = "700 34px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(title, BOARD_SIZE / 2, 270);
+  ctx.fillText(title, boardWidth / 2, overlayY + 62);
 
   ctx.fillStyle = currentTheme.overlaySubtitle;
   ctx.font = "500 18px 'Segoe UI', sans-serif";
   const subtitleLines = getOverlaySubtitleLines(subtitle, 290);
   const lineHeight = 24;
-  const startY = 314 - ((subtitleLines.length - 1) * lineHeight) / 2;
+  const startY = overlayY + 106 - ((subtitleLines.length - 1) * lineHeight) / 2;
 
   subtitleLines.forEach((line, index) => {
-    ctx.fillText(line, BOARD_SIZE / 2, startY + index * lineHeight);
+    ctx.fillText(line, boardWidth / 2, startY + index * lineHeight);
   });
   ctx.restore();
 }
 
 function draw(frameTime) {
-  ctx.clearRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
   drawFood(frameTime);
   players.forEach((player) => drawSnake(player, frameTime));
