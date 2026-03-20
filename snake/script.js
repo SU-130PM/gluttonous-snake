@@ -148,19 +148,19 @@ const THEMES = {
     overlaySubtitle: "rgba(247, 246, 239, 0.8)"
   },
   future: {
-    snakePalette: ["#5af4ff", "#78b8ff", "#b38fff", "#81ffd8"],
+    snakePalette: ["#ff5cd6", "#a16cff", "#ff4568", "#ff8b68"],
     snakeShiftSpeed: 105,
-    boardTile: "rgba(220, 247, 255, 0.03)",
-    foodGlowInner: "rgba(194, 255, 248, 0.96)",
-    foodGlowMid: "rgba(86, 229, 255, 0.86)",
-    foodGlowOuter: "rgba(86, 229, 255, 0)",
-    foodCore: "#9cf7ff",
-    foodHighlight: "#f8ffff",
-    eyeColor: "#0e2a44",
-    overlayBg: "rgba(7, 18, 41, 0.54)",
-    overlayBorder: "rgba(171, 246, 255, 0.18)",
-    overlayTitle: "#f2fdff",
-    overlaySubtitle: "rgba(242, 253, 255, 0.82)"
+    boardTile: "rgba(255, 221, 243, 0.035)",
+    foodGlowInner: "rgba(255, 230, 244, 0.96)",
+    foodGlowMid: "rgba(255, 82, 129, 0.88)",
+    foodGlowOuter: "rgba(255, 82, 129, 0)",
+    foodCore: "#ff7ca7",
+    foodHighlight: "#fff7fd",
+    eyeColor: "#351447",
+    overlayBg: "rgba(31, 8, 37, 0.56)",
+    overlayBorder: "rgba(255, 145, 208, 0.2)",
+    overlayTitle: "#fff3fd",
+    overlaySubtitle: "rgba(255, 232, 246, 0.84)"
   }
 };
 
