@@ -364,7 +364,7 @@ function applyMode(modeName, options = {}) {
   syncModeUi();
 
   if (shouldRestart) {
-    restartGame();
+    prepareRound();
   }
 }
 
@@ -426,6 +426,17 @@ function resetRound() {
   endOverlayTitle = "";
   endOverlaySubtitle = "";
   updateStats();
+}
+
+function prepareRound() {
+  clearTimeout(tickTimer);
+  hasStarted = false;
+  gameRunning = false;
+  gamePaused = false;
+  gameOver = false;
+  resetRound();
+  setStatus("等待开始");
+  syncButtons();
 }
 
 function getCurrentSpeed() {
@@ -491,8 +502,11 @@ function restartGame() {
   gamePaused = false;
   gameOver = false;
   resetRound();
-  setStatus("等待开始");
+  hasStarted = true;
+  gameRunning = true;
+  setStatus(gameMode === "versus" ? "对战中" : "游戏中");
   syncButtons();
+  scheduleNextTick();
 }
 
 function endGame(status, title, subtitle) {
@@ -522,10 +536,8 @@ function handleDirectionInput(playerId, nextDirection) {
     return;
   }
 
-  const shouldStartFresh = !hasStarted || gameOver;
-
-  if (shouldStartFresh) {
-    startGame();
+  if (!hasStarted || gameOver) {
+    return;
   }
 
   const player = getPlayerById(playerId);
@@ -897,6 +909,33 @@ function drawSnake(player, frameTime) {
   });
 }
 
+function getOverlaySubtitleLines(subtitle, maxWidth) {
+  return String(subtitle)
+    .split("\n")
+    .flatMap((rawLine) => {
+      if (!rawLine) {
+        return [""];
+      }
+
+      const wrappedLines = [];
+      let currentLine = "";
+
+      for (const char of rawLine) {
+        const nextLine = currentLine + char;
+
+        if (currentLine && ctx.measureText(nextLine).width > maxWidth) {
+          wrappedLines.push(currentLine);
+          currentLine = char;
+        } else {
+          currentLine = nextLine;
+        }
+      }
+
+      wrappedLines.push(currentLine);
+      return wrappedLines;
+    });
+}
+
 function drawOverlay(title, subtitle) {
   ctx.save();
   ctx.fillStyle = currentTheme.overlayBg;
@@ -916,7 +955,13 @@ function drawOverlay(title, subtitle) {
 
   ctx.fillStyle = currentTheme.overlaySubtitle;
   ctx.font = "500 18px 'Segoe UI', sans-serif";
-  ctx.fillText(subtitle, BOARD_SIZE / 2, 314);
+  const subtitleLines = getOverlaySubtitleLines(subtitle, 290);
+  const lineHeight = 24;
+  const startY = 314 - ((subtitleLines.length - 1) * lineHeight) / 2;
+
+  subtitleLines.forEach((line, index) => {
+    ctx.fillText(line, BOARD_SIZE / 2, startY + index * lineHeight);
+  });
   ctx.restore();
 }
 
@@ -928,13 +973,16 @@ function draw(frameTime) {
 
   if (!hasStarted && !gameRunning && !gameOver) {
     const subtitle = gameMode === "single"
-      ? "点击开始游戏，或者直接按方向键"
-      : "点击开始对战，A 用 WASD，B 用方向键";
+      ? "按空格或点击开始游戏\n方向键 / WASD 控制移动"
+      : "按空格或点击开始对战\nA 用 WASD，B 用方向键";
     drawOverlay("准备开局", subtitle);
   } else if (gamePaused) {
     drawOverlay("暂停中", "按空格或点击开始继续");
   } else if (gameOver) {
-    drawOverlay(endOverlayTitle, endOverlaySubtitle);
+    const subtitle = endOverlaySubtitle
+      ? `${endOverlaySubtitle}\n按空格或点重新开始再来一局。`
+      : "按空格或点重新开始再来一局。";
+    drawOverlay(endOverlayTitle, subtitle);
   }
 }
 
@@ -1023,7 +1071,5 @@ playerBSkinSelect.value = playerSkinChoices.B;
 
 applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME);
 applyMode(localStorage.getItem(MODE_STORAGE_KEY) || DEFAULT_MODE, { shouldRestart: false });
-resetRound();
-setStatus("等待开始");
-syncButtons();
+prepareRound();
 requestAnimationFrame(render);
