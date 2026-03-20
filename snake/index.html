@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>彩虹贪吃蛇</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="candy">
+  <div class="scene">
+    <div class="bg-shape shape-one"></div>
+    <div class="bg-shape shape-two"></div>
+    <div class="bg-shape shape-three"></div>
+
+    <main class="app-shell">
+      <section class="hero">
+        <p class="eyebrow">Pure HTML + CSS + JavaScript</p>
+        <h1>彩虹贪吃蛇</h1>
+        <p class="hero-copy">
+          一个纯原生实现的小网页游戏，带一点糖果色、霓虹感和街机气氛。
+        </p>
+      </section>
+
+      <section class="game-card">
+        <div class="stats-row">
+          <div class="stat-pill">
+            <span id="primaryStatLabel">当前分数</span>
+            <strong id="primaryStatValue">0</strong>
+          </div>
+          <div class="stat-pill">
+            <span id="secondaryStatLabel">历史最高</span>
+            <strong id="secondaryStatValue">0</strong>
+          </div>
+          <div class="stat-pill">
+            <span>状态</span>
+            <strong id="statusText">等待开始</strong>
+          </div>
+        </div>
+
+        <section class="setup-panel" aria-labelledby="setupTitle">
+          <div class="setup-head">
+            <h2 id="setupTitle">开局设置</h2>
+            <p id="modeDescription">单人模式支持方向键和 WASD，双人模式下 A 用 WASD，B 用方向键。</p>
+          </div>
+
+          <div class="setup-grid">
+            <div class="mode-switch" role="group" aria-label="游戏模式">
+              <button id="singleModeBtn" class="mode-chip is-active" data-mode="single" type="button" aria-pressed="true">单人经典</button>
+              <button id="versusModeBtn" class="mode-chip" data-mode="versus" type="button" aria-pressed="false">双人对战</button>
+            </div>
+
+            <div id="playerSetup" class="player-setup" hidden>
+              <label class="skin-picker" for="playerASkinSelect">
+                <span>A 皮肤</span>
+                <select id="playerASkinSelect">
+                  <option value="candy">糖果泡泡</option>
+                  <option value="aurora">极光冰川</option>
+                  <option value="forest">森野秘境</option>
+                  <option value="ember">熔焰暮色</option>
+                  <option value="ink">水墨写意</option>
+                  <option value="future" selected>未来都市</option>
+                </select>
+              </label>
+
+              <label class="skin-picker" for="playerBSkinSelect">
+                <span>B 皮肤</span>
+                <select id="playerBSkinSelect">
+                  <option value="candy">糖果泡泡</option>
+                  <option value="aurora">极光冰川</option>
+                  <option value="forest">森野秘境</option>
+                  <option value="ember" selected>熔焰暮色</option>
+                  <option value="ink">水墨写意</option>
+                  <option value="future">未来都市</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <div class="control-row">
+          <button id="startBtn" class="action-btn action-btn-primary" type="button">开始游戏</button>
+          <button id="pauseBtn" class="action-btn action-btn-secondary" type="button">暂停</button>
+          <button id="restartBtn" class="action-btn action-btn-ghost" type="button">重新开始</button>
+
+          <label class="speed-picker" for="speedSelect">
+            <span>速度</span>
+            <select id="speedSelect">
+              <option value="165">悠闲</option>
+              <option value="130" selected>标准</option>
+              <option value="100">加速</option>
+              <option value="75">疾速</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="content-grid">
+          <div class="board-panel">
+            <div class="board-frame">
+              <canvas id="gameCanvas" width="600" height="600" aria-label="贪吃蛇游戏"></canvas>
+            </div>
+            <p id="boardCaption" class="board-caption">方向键 / WASD 控制，空格可开始或暂停。</p>
+          </div>
+
+          <aside class="info-panel">
+            <h2>玩法说明</h2>
+            <ul id="tipsList" class="tips-list">
+              <li>吃到糖果球就会变长，并增加分数。</li>
+              <li>撞到墙壁或撞到自己，游戏结束。</li>
+              <li>速度会随着分数慢慢提升，越到后面越刺激。</li>
+            </ul>
+
+            <section class="theme-panel" aria-labelledby="themeTitle">
+              <div class="theme-panel-head">
+                <h3 id="themeTitle">页面主题</h3>
+                <p>这里控制整页氛围和棋盘风格；双人模式下 A / B 蛇皮肤可单独选择。</p>
+              </div>
+
+              <div class="theme-grid" role="group" aria-label="主题切换">
+                <button class="theme-chip is-active" data-theme="candy" type="button" aria-pressed="true">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>糖果泡泡</strong>
+                  <small>甜酷霓虹</small>
+                </button>
+                <button class="theme-chip" data-theme="aurora" type="button" aria-pressed="false">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>极光冰川</strong>
+                  <small>冷色流光</small>
+                </button>
+                <button class="theme-chip" data-theme="forest" type="button" aria-pressed="false">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>森野秘境</strong>
+                  <small>自然荧光</small>
+                </button>
+                <button class="theme-chip" data-theme="ember" type="button" aria-pressed="false">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>熔焰暮色</strong>
+                  <small>热烈街机</small>
+                </button>
+                <button class="theme-chip" data-theme="ink" type="button" aria-pressed="false">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>水墨写意</strong>
+                  <small>留白青灰</small>
+                </button>
+                <button class="theme-chip" data-theme="future" type="button" aria-pressed="false">
+                  <span class="theme-swatch" aria-hidden="true"></span>
+                  <strong>未来都市</strong>
+                  <small>赛博电光</small>
+                </button>
+              </div>
+            </section>
+
+            <div class="tag-row">
+              <span>双人对战</span>
+              <span>主题换肤</span>
+              <span>本地最高分</span>
+              <span>移动端按键</span>
+            </div>
+          </aside>
+        </div>
+
+        <div id="mobileControls" class="mobile-controls" aria-label="移动端方向控制">
+          <button class="pad-btn pad-up" data-direction="up" type="button">▲</button>
+          <button class="pad-btn pad-left" data-direction="left" type="button">◀</button>
+          <button class="pad-btn pad-down" data-direction="down" type="button">▼</button>
+          <button class="pad-btn pad-right" data-direction="right" type="button">▶</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
