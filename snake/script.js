@@ -6,6 +6,8 @@ const primaryStatValue = document.getElementById("primaryStatValue");
 const secondaryStatLabel = document.getElementById("secondaryStatLabel");
 const secondaryStatValue = document.getElementById("secondaryStatValue");
 const statusTextEl = document.getElementById("statusText");
+const growthTimerPillEl = document.getElementById("growthTimerPill");
+const growthTimerValueEl = document.getElementById("growthTimerValue");
 const startBtn = document.getElementById("startBtn");
 const pauseBtn = document.getElementById("pauseBtn");
 const restartBtn = document.getElementById("restartBtn");
@@ -13,6 +15,7 @@ const speedSelect = document.getElementById("speedSelect");
 const boardCaptionEl = document.getElementById("boardCaption");
 const tipsListEl = document.getElementById("tipsList");
 const modeDescriptionEl = document.getElementById("modeDescription");
+const versusRuleSetupEl = document.getElementById("versusRuleSetup");
 const playerSetupEl = document.getElementById("playerSetup");
 const playerASkinSelect = document.getElementById("playerASkinSelect");
 const playerBSkinSelect = document.getElementById("playerBSkinSelect");
@@ -20,6 +23,7 @@ const mobileControlsEl = document.getElementById("mobileControls");
 const padButtons = document.querySelectorAll(".pad-btn");
 const themeButtons = document.querySelectorAll(".theme-chip");
 const modeButtons = document.querySelectorAll(".mode-chip");
+const versusRuleButtons = document.querySelectorAll(".versus-rule-chip");
 
 const CELL_SIZE = 30;
 const GRID_ROWS = 20;
@@ -29,13 +33,49 @@ const FOOD_SAFE_MARGIN = 1;
 const BEST_SCORE_KEY = "rainbow-snake-best-score";
 const THEME_STORAGE_KEY = "rainbow-snake-theme";
 const MODE_STORAGE_KEY = "rainbow-snake-mode";
+const VERSUS_RULE_STORAGE_KEY = "rainbow-snake-versus-rule";
 const PLAYER_A_SKIN_STORAGE_KEY = "rainbow-snake-player-a-skin";
 const PLAYER_B_SKIN_STORAGE_KEY = "rainbow-snake-player-b-skin";
 const DEFAULT_THEME = "candy";
 const DEFAULT_MODE = "single";
+const DEFAULT_VERSUS_RULE = "classic";
 const DEFAULT_PLAYER_SKINS = {
   A: "future",
   B: "ember"
+};
+const GROWTH_MODE_DURATION_MS = 3 * 60 * 1000;
+const FUN_ITEM_LIFETIME_MS = 10 * 1000;
+const FUN_ITEM_RESPAWN_MS = 3500;
+const SPEED_LEVELS = [165, 130, 100, 75];
+const POWER_UPS = {
+  speedUp: {
+    symbol: "+",
+    label: "加速球",
+    fill: "#7df0ff",
+    glow: "rgba(125, 240, 255, 0.88)",
+    text: "#0f3357"
+  },
+  speedDown: {
+    symbol: "-",
+    label: "减速球",
+    fill: "#95a6ff",
+    glow: "rgba(149, 166, 255, 0.84)",
+    text: "#122347"
+  },
+  magnet: {
+    symbol: "U",
+    label: "磁石",
+    fill: "#ff92df",
+    glow: "rgba(255, 146, 223, 0.86)",
+    text: "#4b1745"
+  },
+  halve: {
+    symbol: "-50%",
+    label: "减半球",
+    fill: "#ffb56d",
+    glow: "rgba(255, 181, 109, 0.86)",
+    text: "#52261a"
+  }
 };
 
 const vectorUp = { x: 0, y: -1 };
@@ -171,6 +211,7 @@ let bestScore = Number(localStorage.getItem(BEST_SCORE_KEY) || 0);
 let currentThemeName = DEFAULT_THEME;
 let currentTheme = THEMES[DEFAULT_THEME];
 let gameMode = DEFAULT_MODE;
+let versusRule = DEFAULT_VERSUS_RULE;
 let playerSkinChoices = {
   A: DEFAULT_PLAYER_SKINS.A,
   B: DEFAULT_PLAYER_SKINS.B
@@ -182,6 +223,12 @@ let hasStarted = false;
 let tickTimer = null;
 let endOverlayTitle = "";
 let endOverlaySubtitle = "";
+let activePowerUp = null;
+let nextPowerUpSpawnAt = 0;
+let growthTimeRemainingMs = GROWTH_MODE_DURATION_MS;
+let growthResumeAt = 0;
+let funSpeedTier = SPEED_LEVELS.indexOf(Number(speedSelect.value));
+let statusMessage = "等待开始";
 
 function sanitizeTheme(themeName) {
   return THEMES[themeName] ? themeName : DEFAULT_THEME;
@@ -189,6 +236,18 @@ function sanitizeTheme(themeName) {
 
 function sanitizeMode(modeName) {
   return modeName === "versus" ? "versus" : DEFAULT_MODE;
+}
+
+function sanitizeVersusRule(ruleName) {
+  return ["classic", "growth", "fun"].includes(ruleName) ? ruleName : DEFAULT_VERSUS_RULE;
+}
+
+function isGrowthVersusMode() {
+  return gameMode === "versus" && versusRule === "growth";
+}
+
+function isFunVersusMode() {
+  return gameMode === "versus" && versusRule === "fun";
 }
 
 function getGridColumns() {
@@ -206,6 +265,41 @@ function getBoardHeight() {
 function syncCanvasSize() {
   canvas.width = getBoardWidth();
   canvas.height = getBoardHeight();
+}
+
+function getSelectedSpeedTier() {
+  const selectedValue = Number(speedSelect.value);
+  const selectedTier = SPEED_LEVELS.indexOf(selectedValue);
+  return selectedTier === -1 ? 1 : selectedTier;
+}
+
+function setFunSpeedTier(nextTier) {
+  const clampedTier = Math.max(0, Math.min(SPEED_LEVELS.length - 1, nextTier));
+  funSpeedTier = clampedTier;
+  speedSelect.value = String(SPEED_LEVELS[clampedTier]);
+}
+
+function getPlayerLength(player) {
+  return player ? player.segments.length + player.pendingGrowth : 0;
+}
+
+function getGrowthTimeRemainingMs() {
+  if (!isGrowthVersusMode()) {
+    return 0;
+  }
+
+  if (gameRunning && growthResumeAt > 0) {
+    return Math.max(0, growthTimeRemainingMs - (Date.now() - growthResumeAt));
+  }
+
+  return Math.max(0, growthTimeRemainingMs);
+}
+
+function formatTimer(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function createDirection(x, y) {
@@ -260,6 +354,7 @@ function createPlayer(config) {
     direction: createDirection(config.direction.x, config.direction.y),
     nextDirection: createDirection(config.direction.x, config.direction.y),
     score: 0,
+    pendingGrowth: 0,
     skinKey: config.skinKey
   };
 }
@@ -359,7 +454,30 @@ function updateTips() {
       <li>速度会随着分数慢慢提升，越到后面越刺激。</li>
     `;
   } else {
-    modeDescriptionEl.textContent = "双人模式下 A 用 WASD，B 用方向键；场上会同时出现 2 到 3 颗糖果。";
+    if (versusRule === "growth") {
+      modeDescriptionEl.textContent = "发育模式限时三分钟，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，三分钟倒计时内尽量发育。";
+      tipsListEl.innerHTML = `
+        <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
+        <li>限时三分钟，时间到按当前蛇身长度判定胜负。</li>
+        <li>若途中撞到边界、自己身体或对方身体，会立刻判对方获胜。</li>
+      `;
+      return;
+    }
+
+    if (versusRule === "fun") {
+      modeDescriptionEl.textContent = "娱乐模式会随机刷出 4 种道具，道具存在 10 秒，没人吃到就会消失并等待下一次刷新。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，+ / - / U / -50% 道具会随机登场。";
+      tipsListEl.innerHTML = `
+        <li>加速球“+”：提升全场速度 1 档，达到疾速档位后不再继续提升。</li>
+        <li>减速球“-”：降低全场速度 1 档，达到悠闲档位后不再继续降低。</li>
+        <li>磁石“U”：自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
+        <li>减半球“-50%”：让对手当前蛇身长度减半，奇数长度会向上取整。</li>
+      `;
+      return;
+    }
+
+    modeDescriptionEl.textContent = "经典模式保留当前双人对战规则：双方同场争夺 2 到 3 颗糖果，撞墙或撞蛇都会直接判负。";
     boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，空格可开始或暂停。";
     tipsListEl.innerHTML = `
       <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
@@ -376,12 +494,20 @@ function syncModeUi() {
     button.setAttribute("aria-pressed", String(isActive));
   });
 
+  versusRuleButtons.forEach((button) => {
+    const isActive = button.dataset.versusRule === versusRule;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
   document.body.dataset.mode = gameMode;
   syncCanvasSize();
+  versusRuleSetupEl.hidden = gameMode !== "versus";
   playerSetupEl.hidden = gameMode !== "versus";
   mobileControlsEl.hidden = gameMode !== "single";
   updateTips();
   updateStats();
+  syncStatusText();
 }
 
 function applyMode(modeName, options = {}) {
@@ -393,6 +519,19 @@ function applyMode(modeName, options = {}) {
   syncModeUi();
 
   if (shouldRestart) {
+    prepareRound();
+  }
+}
+
+function applyVersusRule(ruleName, options = {}) {
+  const { shouldRestart = true } = options;
+  const nextRule = sanitizeVersusRule(ruleName);
+
+  versusRule = nextRule;
+  localStorage.setItem(VERSUS_RULE_STORAGE_KEY, nextRule);
+  syncModeUi();
+
+  if (gameMode === "versus" && shouldRestart) {
     prepareRound();
   }
 }
@@ -409,6 +548,14 @@ function updateStats() {
 
   const playerA = getPlayerById("A");
   const playerB = getPlayerById("B");
+
+  if (isGrowthVersusMode()) {
+    primaryStatLabel.textContent = "A 方长度";
+    primaryStatValue.textContent = String(getPlayerLength(playerA));
+    secondaryStatLabel.textContent = "B 方长度";
+    secondaryStatValue.textContent = String(getPlayerLength(playerB));
+    return;
+  }
 
   primaryStatLabel.textContent = "A 方得分";
   primaryStatValue.textContent = String(playerA ? playerA.score : 0);
@@ -428,8 +575,31 @@ function updateBestScoreIfNeeded() {
   updateStats();
 }
 
+function syncGrowthTimerUi() {
+  const shouldShowTimer = isGrowthVersusMode();
+
+  growthTimerPillEl.hidden = !shouldShowTimer;
+
+  if (!shouldShowTimer) {
+    return;
+  }
+
+  if (gameOver) {
+    growthTimerValueEl.textContent = "00:00";
+    return;
+  }
+
+  growthTimerValueEl.textContent = formatTimer(getGrowthTimeRemainingMs());
+}
+
+function syncStatusText() {
+  syncGrowthTimerUi();
+  statusTextEl.textContent = statusMessage;
+}
+
 function setStatus(text) {
-  statusTextEl.textContent = text;
+  statusMessage = text;
+  syncStatusText();
 }
 
 function syncButtons() {
@@ -449,6 +619,11 @@ function syncButtons() {
 function resetRound() {
   players = gameMode === "single" ? [createSinglePlayer()] : createVersusPlayers();
   foods = [];
+  activePowerUp = null;
+  nextPowerUpSpawnAt = isFunVersusMode() ? Date.now() + FUN_ITEM_RESPAWN_MS : 0;
+  growthTimeRemainingMs = GROWTH_MODE_DURATION_MS;
+  growthResumeAt = 0;
+  setFunSpeedTier(getSelectedSpeedTier());
   syncFoodSupply();
   gamePaused = false;
   gameOver = false;
@@ -475,6 +650,10 @@ function getCurrentSpeed() {
     const player = getSinglePlayer();
     const bonus = player ? Math.floor(player.score / 4) * 4 : 0;
     return Math.max(55, baseSpeed - bonus);
+  }
+
+  if (isFunVersusMode()) {
+    return SPEED_LEVELS[funSpeedTier];
   }
 
   const combinedScore = players.reduce((sum, player) => sum + player.score, 0);
@@ -507,6 +686,9 @@ function startGame() {
   hasStarted = true;
   gameRunning = true;
   gamePaused = false;
+  if (isGrowthVersusMode()) {
+    growthResumeAt = Date.now();
+  }
   setStatus(gameMode === "versus" ? "对战中" : "游戏中");
   syncButtons();
   scheduleNextTick();
@@ -520,6 +702,10 @@ function pauseGame() {
   clearTimeout(tickTimer);
   gameRunning = false;
   gamePaused = true;
+  if (isGrowthVersusMode()) {
+    growthTimeRemainingMs = getGrowthTimeRemainingMs();
+    growthResumeAt = 0;
+  }
   setStatus("暂停中");
   syncButtons();
 }
@@ -533,6 +719,9 @@ function restartGame() {
   resetRound();
   hasStarted = true;
   gameRunning = true;
+  if (isGrowthVersusMode()) {
+    growthResumeAt = Date.now();
+  }
   setStatus(gameMode === "versus" ? "对战中" : "游戏中");
   syncButtons();
   scheduleNextTick();
@@ -542,6 +731,10 @@ function endGame(status, title, subtitle) {
   clearTimeout(tickTimer);
   gameRunning = false;
   gamePaused = false;
+  if (isGrowthVersusMode()) {
+    growthTimeRemainingMs = getGrowthTimeRemainingMs();
+    growthResumeAt = 0;
+  }
   gameOver = true;
   endOverlayTitle = title;
   endOverlaySubtitle = subtitle;
@@ -591,7 +784,7 @@ function getTargetFoodCount() {
   return combinedScore >= 4 ? 3 : 2;
 }
 
-function generateFood(excludedFoods = foods) {
+function generateOpenCell(excludedFoods = foods, blockedPowerUps = activePowerUp ? [activePowerUp] : []) {
   const availableCells = [];
   const innerCells = [];
   const gridColumns = getGridColumns();
@@ -602,8 +795,9 @@ function generateFood(excludedFoods = foods) {
         player.segments.some((segment) => segment.x === x && segment.y === y)
       );
       const occupiedByFood = excludedFoods.some((food) => food.x === x && food.y === y);
+      const occupiedByPowerUp = blockedPowerUps.some((powerUp) => powerUp.x === x && powerUp.y === y);
 
-      if (occupiedBySnake || occupiedByFood) {
+      if (occupiedBySnake || occupiedByFood || occupiedByPowerUp) {
         continue;
       }
 
@@ -631,6 +825,10 @@ function generateFood(excludedFoods = foods) {
   return spawnPool[index];
 }
 
+function generateFood(excludedFoods = foods) {
+  return generateOpenCell(excludedFoods);
+}
+
 function syncFoodSupply() {
   const targetCount = getTargetFoodCount();
 
@@ -649,7 +847,141 @@ function syncFoodSupply() {
   }
 }
 
+function generatePowerUp() {
+  const spawnCell = generateOpenCell(foods, []);
+
+  if (!spawnCell) {
+    return null;
+  }
+
+  const powerUpTypes = Object.keys(POWER_UPS);
+  const nextType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+
+  return {
+    ...spawnCell,
+    type: nextType,
+    expiresAt: Date.now() + FUN_ITEM_LIFETIME_MS
+  };
+}
+
+function syncFunPowerUp(now = Date.now()) {
+  if (!isFunVersusMode()) {
+    activePowerUp = null;
+    nextPowerUpSpawnAt = 0;
+    return;
+  }
+
+  if (activePowerUp && activePowerUp.expiresAt <= now) {
+    activePowerUp = null;
+    nextPowerUpSpawnAt = now + FUN_ITEM_RESPAWN_MS;
+  }
+
+  if (!activePowerUp && nextPowerUpSpawnAt > 0 && now >= nextPowerUpSpawnAt) {
+    activePowerUp = generatePowerUp();
+    nextPowerUpSpawnAt = activePowerUp ? 0 : now + FUN_ITEM_RESPAWN_MS;
+  }
+}
+
+function halvePlayer(targetPlayer) {
+  if (!targetPlayer) {
+    return;
+  }
+
+  const nextLength = Math.max(1, Math.ceil(targetPlayer.segments.length / 2));
+  targetPlayer.segments = targetPlayer.segments.slice(0, nextLength);
+  targetPlayer.pendingGrowth = 0;
+  targetPlayer.score = Math.max(0, nextLength - 3);
+}
+
+function absorbNearbyFoods(player, eatenFoodIndexes) {
+  const head = player.segments[0];
+  let absorbedFoodCount = 0;
+
+  foods.forEach((food, index) => {
+    if (eatenFoodIndexes.has(index)) {
+      return;
+    }
+
+    const insideMagnetField =
+      Math.abs(food.x - head.x) <= 1 &&
+      Math.abs(food.y - head.y) <= 1;
+
+    if (!insideMagnetField) {
+      return;
+    }
+
+    eatenFoodIndexes.add(index);
+    absorbedFoodCount += 1;
+  });
+
+  return absorbedFoodCount;
+}
+
+function applyPowerUpEffect(player, eatenFoodIndexes) {
+  if (!activePowerUp) {
+    return {
+      extraGrowth: 0,
+      halveTargetId: null
+    };
+  }
+
+  if (activePowerUp.type === "speedUp") {
+    setFunSpeedTier(funSpeedTier + 1);
+    return {
+      extraGrowth: 0,
+      halveTargetId: null
+    };
+  }
+
+  if (activePowerUp.type === "speedDown") {
+    setFunSpeedTier(funSpeedTier - 1);
+    return {
+      extraGrowth: 0,
+      halveTargetId: null
+    };
+  }
+
+  if (activePowerUp.type === "magnet") {
+    return {
+      extraGrowth: absorbNearbyFoods(player, eatenFoodIndexes),
+      halveTargetId: null
+    };
+  }
+
+  return {
+    extraGrowth: 0,
+    halveTargetId: player.id === "A" ? "B" : "A"
+  };
+}
+
+function resolveGrowthWinner(reason) {
+  const playerA = getPlayerById("A");
+  const playerB = getPlayerById("B");
+
+  if (!playerA || !playerB) {
+    endGame("平局", "平局", "双方同时结束了这一局。");
+    return;
+  }
+
+  const playerALength = getPlayerLength(playerA);
+  const playerBLength = getPlayerLength(playerB);
+
+  if (playerALength === playerBLength) {
+    endGame("平局", "平局", `${reason} 双方长度相同。`);
+    return;
+  }
+
+  const winner = playerALength > playerBLength ? "A" : "B";
+  const loser = winner === "A" ? "B" : "A";
+  endGame(`${winner} 获胜`, `${winner} 获胜`, `${reason} ${winner} 比 ${loser} 更长，拿下这一局。`);
+}
+
 function resolveVersusWinner() {
+  if (isGrowthVersusMode()) {
+    resolveGrowthWinner("时间结束，按长度判定。");
+    return;
+  }
+
   const playerA = getPlayerById("A");
   const playerB = getPlayerById("B");
 
@@ -669,10 +1001,23 @@ function resolveVersusWinner() {
 }
 
 function tick() {
+  const now = Date.now();
+
+  if (isGrowthVersusMode() && getGrowthTimeRemainingMs() <= 0) {
+    growthTimeRemainingMs = 0;
+    resolveGrowthWinner("时间结束，按长度判定。");
+    return;
+  }
+
+  syncFunPowerUp(now);
+
   const nextHeads = new Map();
   const willEatFood = new Map();
   const losers = new Set();
   const gridColumns = getGridColumns();
+  const growthByPlayer = new Map(players.map((player) => [player.id, 0]));
+  let powerUpConsumerId = null;
+  let pendingHalveTargetId = null;
 
   players.forEach((player) => {
     player.direction = createDirection(player.nextDirection.x, player.nextDirection.y);
@@ -687,6 +1032,10 @@ function tick() {
       player.id,
       foods.findIndex((food) => cellsEqual(nextHead, food))
     );
+
+    if (activePowerUp && cellsEqual(nextHead, activePowerUp)) {
+      powerUpConsumerId = player.id;
+    }
   });
 
   players.forEach((player) => {
@@ -771,13 +1120,48 @@ function tick() {
     player.segments.unshift(nextHead);
 
     if (eatenFoodIndex !== -1) {
-      player.score += 1;
+      growthByPlayer.set(player.id, growthByPlayer.get(player.id) + 1);
       eatenFoodIndexes.add(eatenFoodIndex);
+    }
+  });
+
+  if (powerUpConsumerId && activePowerUp) {
+    const consumer = getPlayerById(powerUpConsumerId);
+
+    if (consumer) {
+      const { extraGrowth, halveTargetId } = applyPowerUpEffect(consumer, eatenFoodIndexes);
+      growthByPlayer.set(consumer.id, growthByPlayer.get(consumer.id) + extraGrowth);
+      pendingHalveTargetId = halveTargetId;
+    }
+
+    activePowerUp = null;
+    nextPowerUpSpawnAt = now + FUN_ITEM_RESPAWN_MS;
+  }
+
+  players.forEach((player) => {
+    const growthThisTurn = growthByPlayer.get(player.id) || 0;
+
+    if (growthThisTurn > 0) {
+      player.score += growthThisTurn;
+
+      if (growthThisTurn > 1) {
+        player.pendingGrowth += growthThisTurn - 1;
+      }
+
+      return;
+    }
+
+    if (player.pendingGrowth > 0) {
+      player.pendingGrowth -= 1;
       return;
     }
 
     player.segments.pop();
   });
+
+  if (pendingHalveTargetId) {
+    halvePlayer(getPlayerById(pendingHalveTargetId));
+  }
 
   if (eatenFoodIndexes.size > 0) {
     foods = foods.filter((_, index) => !eatenFoodIndexes.has(index));
@@ -793,12 +1177,22 @@ function tick() {
         updateBestScoreIfNeeded();
         endGame("通关啦", "你通关啦", "整张棋盘都被你吃满了。");
       } else {
-        resolveVersusWinner();
+        if (isGrowthVersusMode()) {
+          resolveGrowthWinner("棋盘已被吃满，按长度判定。");
+        } else {
+          resolveVersusWinner();
+        }
       }
 
       updateStats();
       return;
     }
+  }
+
+  if (isGrowthVersusMode() && getGrowthTimeRemainingMs() <= 0) {
+    growthTimeRemainingMs = 0;
+    resolveGrowthWinner("时间结束，按长度判定。");
+    return;
   }
 
   updateStats();
@@ -864,6 +1258,53 @@ function drawFood(frameTime) {
     ctx.fill();
     ctx.restore();
   });
+}
+
+function drawPowerUp(frameTime) {
+  if (!activePowerUp) {
+    return;
+  }
+
+  const powerUpTheme = POWER_UPS[activePowerUp.type];
+  const centerX = activePowerUp.x * CELL_SIZE + CELL_SIZE / 2;
+  const centerY = activePowerUp.y * CELL_SIZE + CELL_SIZE / 2;
+  const pulse = 0.5 + Math.sin(frameTime / 170) * 0.5;
+  const remainingRatio = Math.max(0, (activePowerUp.expiresAt - Date.now()) / FUN_ITEM_LIFETIME_MS);
+  const alpha = 0.4 + remainingRatio * 0.6;
+  const coreRadius = CELL_SIZE * (0.34 + pulse * 0.04);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  const glow = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, CELL_SIZE * 0.84);
+  glow.addColorStop(0, toRgba(powerUpTheme.fill, 0.92));
+  glow.addColorStop(0.52, powerUpTheme.glow);
+  glow.addColorStop(1, toRgba(powerUpTheme.fill, 0));
+
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, CELL_SIZE * 0.78, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = powerUpTheme.fill;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = toRgba(currentTheme.foodHighlight, 0.6);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, coreRadius + 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = powerUpTheme.text;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = activePowerUp.type === "halve"
+    ? "800 11px 'Segoe UI', sans-serif"
+    : "900 18px 'Segoe UI', sans-serif";
+  ctx.fillText(powerUpTheme.symbol, centerX, centerY + 0.5);
+  ctx.restore();
 }
 
 function drawSnakeEyes(head, direction, skinTheme) {
@@ -1006,9 +1447,11 @@ function drawOverlay(title, subtitle) {
 }
 
 function draw(frameTime) {
+  syncStatusText();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBackground();
   drawFood(frameTime);
+  drawPowerUp(frameTime);
   players.forEach((player) => drawSnake(player, frameTime));
 
   if (!hasStarted && !gameRunning && !gameOver) {
@@ -1036,6 +1479,10 @@ pauseBtn.addEventListener("click", pauseGame);
 restartBtn.addEventListener("click", restartGame);
 
 speedSelect.addEventListener("change", () => {
+  if (isFunVersusMode()) {
+    setFunSpeedTier(getSelectedSpeedTier());
+  }
+
   if (gameRunning) {
     scheduleNextTick();
   }
@@ -1044,6 +1491,12 @@ speedSelect.addEventListener("change", () => {
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => {
     applyMode(button.dataset.mode);
+  });
+});
+
+versusRuleButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    applyVersusRule(button.dataset.versusRule);
   });
 });
 
@@ -1101,6 +1554,7 @@ padButtons.forEach((button) => {
 });
 
 bestScore = Number(localStorage.getItem(BEST_SCORE_KEY) || 0);
+versusRule = sanitizeVersusRule(localStorage.getItem(VERSUS_RULE_STORAGE_KEY) || DEFAULT_VERSUS_RULE);
 playerSkinChoices = {
   A: sanitizeTheme(localStorage.getItem(PLAYER_A_SKIN_STORAGE_KEY) || DEFAULT_PLAYER_SKINS.A),
   B: sanitizeTheme(localStorage.getItem(PLAYER_B_SKIN_STORAGE_KEY) || DEFAULT_PLAYER_SKINS.B)

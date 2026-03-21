@@ -407,6 +407,7 @@ body {
 .theme-panel,
 .theme-chip,
 .mode-chip,
+.versus-rule-chip,
 .skin-picker,
 .action-btn,
 .pad-btn,
@@ -444,6 +445,31 @@ body {
   font-size: clamp(1.45rem, 3vw, 2rem);
 }
 
+.growth-timer-pill {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.growth-timer-pill span,
+.growth-timer-pill strong {
+  margin: 0;
+}
+
+.growth-timer-pill span {
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.growth-timer-pill strong {
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+}
+
 .setup-panel {
   margin-bottom: 18px;
   padding: 18px;
@@ -476,6 +502,24 @@ body {
   gap: 12px;
 }
 
+.versus-rule-setup {
+  display: grid;
+  gap: 12px;
+}
+
+.versus-rule-label {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+  letter-spacing: 0.03em;
+}
+
+.versus-rule-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .mode-chip {
   border: 1px solid var(--mode-chip-border);
   border-radius: 18px;
@@ -493,12 +537,30 @@ body {
   transform: translateY(-2px);
 }
 
-.mode-chip.is-active {
+.mode-chip.is-active,
+.versus-rule-chip.is-active {
   background: var(--mode-chip-active-bg);
   border-color: var(--mode-chip-active-ring);
   box-shadow:
     0 0 0 3px var(--mode-chip-active-ring),
     0 16px 32px rgba(45, 59, 107, 0.12);
+}
+
+.versus-rule-chip {
+  border: 1px solid var(--mode-chip-border);
+  border-radius: 18px;
+  padding: 13px 16px;
+  background: var(--mode-chip-bg);
+  box-shadow: var(--mode-chip-shadow);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.versus-rule-chip:hover {
+  transform: translateY(-2px);
 }
 
 .player-setup {
@@ -546,7 +608,8 @@ body {
 .action-btn,
 .pad-btn,
 .speed-picker select,
-.theme-chip {
+.theme-chip,
+.versus-rule-chip {
   font: inherit;
 }
 
@@ -567,7 +630,8 @@ body {
 
 .action-btn:active,
 .pad-btn:active,
-.theme-chip:active {
+.theme-chip:active,
+.versus-rule-chip:active {
   transform: translateY(0);
 }
 
@@ -943,6 +1007,10 @@ body[data-mode="versus"] #gameCanvas {
   }
 
   .mode-switch {
+    grid-template-columns: 1fr;
+  }
+
+  .versus-rule-switch {
     grid-template-columns: 1fr;
   }
 

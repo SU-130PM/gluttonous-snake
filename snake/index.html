@@ -49,6 +49,15 @@
               <button id="versusModeBtn" class="mode-chip" data-mode="versus" type="button" aria-pressed="false">双人对战</button>
             </div>
 
+            <div id="versusRuleSetup" class="versus-rule-setup" hidden>
+              <span class="versus-rule-label">双人玩法</span>
+              <div class="versus-rule-switch" role="group" aria-label="双人玩法模式">
+                <button class="versus-rule-chip is-active" data-versus-rule="classic" type="button" aria-pressed="true">经典模式</button>
+                <button class="versus-rule-chip" data-versus-rule="growth" type="button" aria-pressed="false">发育模式</button>
+                <button class="versus-rule-chip" data-versus-rule="fun" type="button" aria-pressed="false">娱乐模式</button>
+              </div>
+            </div>
+
             <div id="playerSetup" class="player-setup" hidden>
               <label class="skin-picker" for="playerASkinSelect">
                 <span>A 皮肤</span>
@@ -81,6 +90,10 @@
           <button id="startBtn" class="action-btn action-btn-primary" type="button">开始游戏</button>
           <button id="pauseBtn" class="action-btn action-btn-secondary" type="button">暂停</button>
           <button id="restartBtn" class="action-btn action-btn-ghost" type="button">重新开始</button>
+          <div id="growthTimerPill" class="stat-pill growth-timer-pill" hidden>
+            <span>剩余时间</span>
+            <strong id="growthTimerValue">03:00</strong>
+          </div>
 
           <label class="speed-picker" for="speedSelect">
             <span>速度</span>
