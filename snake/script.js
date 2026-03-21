@@ -43,9 +43,11 @@ const DEFAULT_PLAYER_SKINS = {
   A: "future",
   B: "ember"
 };
-const GROWTH_MODE_DURATION_MS = 3 * 60 * 1000;
+const GROWTH_MODE_DURATION_MS = 90 * 1000;
 const FUN_ITEM_LIFETIME_MS = 10 * 1000;
 const FUN_ITEM_RESPAWN_MS = 3500;
+const MAGNET_EFFECT_DURATION_MS = 15000;
+const FOOD_ATTRACTION_ANIMATION_MS = 420;
 const SPEED_LEVELS = [165, 130, 100, 75];
 const POWER_UPS = {
   speedUp: {
@@ -68,6 +70,13 @@ const POWER_UPS = {
     fill: "#ff92df",
     glow: "rgba(255, 146, 223, 0.86)",
     text: "#4b1745"
+  },
+  plusFive: {
+    symbol: "+5",
+    label: "加五球",
+    fill: "#8cff9e",
+    glow: "rgba(140, 255, 158, 0.86)",
+    text: "#173e20"
   },
   halve: {
     symbol: "-50%",
@@ -229,6 +238,7 @@ let growthTimeRemainingMs = GROWTH_MODE_DURATION_MS;
 let growthResumeAt = 0;
 let funSpeedTier = SPEED_LEVELS.indexOf(Number(speedSelect.value));
 let statusMessage = "等待开始";
+let foodAttractionAnimations = [];
 
 function sanitizeTheme(themeName) {
   return THEMES[themeName] ? themeName : DEFAULT_THEME;
@@ -277,6 +287,10 @@ function setFunSpeedTier(nextTier) {
   const clampedTier = Math.max(0, Math.min(SPEED_LEVELS.length - 1, nextTier));
   funSpeedTier = clampedTier;
   speedSelect.value = String(SPEED_LEVELS[clampedTier]);
+}
+
+function setFunSpeedToStandard() {
+  setFunSpeedTier(1);
 }
 
 function getPlayerLength(player) {
@@ -355,6 +369,7 @@ function createPlayer(config) {
     nextDirection: createDirection(config.direction.x, config.direction.y),
     score: 0,
     pendingGrowth: 0,
+    magnetUntil: 0,
     skinKey: config.skinKey
   };
 }
@@ -455,23 +470,24 @@ function updateTips() {
     `;
   } else {
     if (versusRule === "growth") {
-      modeDescriptionEl.textContent = "发育模式限时三分钟，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
-      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，三分钟倒计时内尽量发育。";
+      modeDescriptionEl.textContent = "发育模式限时一分半，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分半倒计时内尽量发育。";
       tipsListEl.innerHTML = `
         <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
-        <li>限时三分钟，时间到按当前蛇身长度判定胜负。</li>
+        <li>限时一分半，时间到按当前蛇身长度判定胜负。</li>
         <li>若途中撞到边界、自己身体或对方身体，会立刻判对方获胜。</li>
       `;
       return;
     }
 
     if (versusRule === "fun") {
-      modeDescriptionEl.textContent = "娱乐模式会随机刷出 4 种道具，道具存在 10 秒，没人吃到就会消失并等待下一次刷新。";
-      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，+ / - / U / -50% 道具会随机登场。";
+      modeDescriptionEl.textContent = "娱乐模式会随机刷出道具，道具存在 10 秒，没人吃到就会消失并等待下一次刷新。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，道具会随机登场。";
       tipsListEl.innerHTML = `
         <li>加速球“+”：提升全场速度 1 档，达到疾速档位后不再继续提升。</li>
         <li>减速球“-”：降低全场速度 1 档，达到悠闲档位后不再继续降低。</li>
-        <li>磁石“U”：自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
+        <li>磁石“U”：开启 15 秒磁场，自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
+        <li>加五球“+5”：让自己立刻增加 5 格长度。</li>
         <li>减半球“-50%”：让对手当前蛇身长度减半，奇数长度会向上取整。</li>
       `;
       return;
@@ -620,10 +636,15 @@ function resetRound() {
   players = gameMode === "single" ? [createSinglePlayer()] : createVersusPlayers();
   foods = [];
   activePowerUp = null;
+  foodAttractionAnimations = [];
   nextPowerUpSpawnAt = isFunVersusMode() ? Date.now() + FUN_ITEM_RESPAWN_MS : 0;
   growthTimeRemainingMs = GROWTH_MODE_DURATION_MS;
   growthResumeAt = 0;
-  setFunSpeedTier(getSelectedSpeedTier());
+  if (isFunVersusMode()) {
+    setFunSpeedToStandard();
+  } else {
+    setFunSpeedTier(getSelectedSpeedTier());
+  }
   syncFoodSupply();
   gamePaused = false;
   gameOver = false;
@@ -893,7 +914,32 @@ function halvePlayer(targetPlayer) {
   targetPlayer.score = Math.max(0, nextLength - 3);
 }
 
-function absorbNearbyFoods(player, eatenFoodIndexes) {
+function extendPlayerTail(player, extraSegments) {
+  if (!player || extraSegments <= 0 || player.segments.length === 0) {
+    return;
+  }
+
+  const tail = player.segments[player.segments.length - 1];
+
+  for (let index = 0; index < extraSegments; index += 1) {
+    player.segments.push(cloneSegment(tail));
+  }
+}
+
+function isMagnetActive(player, now = Date.now()) {
+  return Boolean(player) && player.magnetUntil > now;
+}
+
+function queueFoodAttractionAnimation(food, playerId, now) {
+  foodAttractionAnimations.push({
+    startX: food.x * CELL_SIZE + CELL_SIZE / 2,
+    startY: food.y * CELL_SIZE + CELL_SIZE / 2,
+    playerId,
+    createdAt: now
+  });
+}
+
+function collectMagnetFoods(player, eatenFoodIndexes, now) {
   const head = player.segments[0];
   let absorbedFoodCount = 0;
 
@@ -911,16 +957,24 @@ function absorbNearbyFoods(player, eatenFoodIndexes) {
     }
 
     eatenFoodIndexes.add(index);
+    queueFoodAttractionAnimation(food, player.id, now);
     absorbedFoodCount += 1;
   });
 
   return absorbedFoodCount;
 }
 
-function applyPowerUpEffect(player, eatenFoodIndexes) {
+function syncFoodAttractionAnimations(now = Date.now()) {
+  foodAttractionAnimations = foodAttractionAnimations.filter((animation) =>
+    now - animation.createdAt <= FOOD_ATTRACTION_ANIMATION_MS
+  );
+}
+
+function applyPowerUpEffect(player, eatenFoodIndexes, now) {
   if (!activePowerUp) {
     return {
       extraGrowth: 0,
+      instantGrowth: false,
       halveTargetId: null
     };
   }
@@ -929,6 +983,7 @@ function applyPowerUpEffect(player, eatenFoodIndexes) {
     setFunSpeedTier(funSpeedTier + 1);
     return {
       extraGrowth: 0,
+      instantGrowth: false,
       halveTargetId: null
     };
   }
@@ -937,19 +992,32 @@ function applyPowerUpEffect(player, eatenFoodIndexes) {
     setFunSpeedTier(funSpeedTier - 1);
     return {
       extraGrowth: 0,
+      instantGrowth: false,
       halveTargetId: null
     };
   }
 
   if (activePowerUp.type === "magnet") {
+    player.magnetUntil = now + MAGNET_EFFECT_DURATION_MS;
+
     return {
-      extraGrowth: absorbNearbyFoods(player, eatenFoodIndexes),
+      extraGrowth: collectMagnetFoods(player, eatenFoodIndexes, now),
+      instantGrowth: false,
+      halveTargetId: null
+    };
+  }
+
+  if (activePowerUp.type === "plusFive") {
+    return {
+      extraGrowth: 5,
+      instantGrowth: true,
       halveTargetId: null
     };
   }
 
   return {
     extraGrowth: 0,
+    instantGrowth: false,
     halveTargetId: player.id === "A" ? "B" : "A"
   };
 }
@@ -1002,6 +1070,7 @@ function resolveVersusWinner() {
 
 function tick() {
   const now = Date.now();
+  syncFoodAttractionAnimations(now);
 
   if (isGrowthVersusMode() && getGrowthTimeRemainingMs() <= 0) {
     growthTimeRemainingMs = 0;
@@ -1016,6 +1085,7 @@ function tick() {
   const losers = new Set();
   const gridColumns = getGridColumns();
   const growthByPlayer = new Map(players.map((player) => [player.id, 0]));
+  const instantGrowthByPlayer = new Map(players.map((player) => [player.id, false]));
   let powerUpConsumerId = null;
   let pendingHalveTargetId = null;
 
@@ -1129,8 +1199,9 @@ function tick() {
     const consumer = getPlayerById(powerUpConsumerId);
 
     if (consumer) {
-      const { extraGrowth, halveTargetId } = applyPowerUpEffect(consumer, eatenFoodIndexes);
+      const { extraGrowth, instantGrowth, halveTargetId } = applyPowerUpEffect(consumer, eatenFoodIndexes, now);
       growthByPlayer.set(consumer.id, growthByPlayer.get(consumer.id) + extraGrowth);
+      instantGrowthByPlayer.set(consumer.id, instantGrowth);
       pendingHalveTargetId = halveTargetId;
     }
 
@@ -1139,10 +1210,27 @@ function tick() {
   }
 
   players.forEach((player) => {
+    if (!isMagnetActive(player, now)) {
+      return;
+    }
+
+    const absorbedFoodCount = collectMagnetFoods(player, eatenFoodIndexes, now);
+
+    if (absorbedFoodCount > 0) {
+      growthByPlayer.set(player.id, growthByPlayer.get(player.id) + absorbedFoodCount);
+    }
+  });
+
+  players.forEach((player) => {
     const growthThisTurn = growthByPlayer.get(player.id) || 0;
 
     if (growthThisTurn > 0) {
       player.score += growthThisTurn;
+
+      if (instantGrowthByPlayer.get(player.id)) {
+        extendPlayerTail(player, growthThisTurn - 1);
+        return;
+      }
 
       if (growthThisTurn > 1) {
         player.pendingGrowth += growthThisTurn - 1;
@@ -1302,8 +1390,82 @@ function drawPowerUp(frameTime) {
   ctx.textBaseline = "middle";
   ctx.font = activePowerUp.type === "halve"
     ? "800 11px 'Segoe UI', sans-serif"
-    : "900 18px 'Segoe UI', sans-serif";
+    : activePowerUp.type === "plusFive"
+      ? "900 14px 'Segoe UI', sans-serif"
+      : "900 18px 'Segoe UI', sans-serif";
   ctx.fillText(powerUpTheme.symbol, centerX, centerY + 0.5);
+  ctx.restore();
+}
+
+function drawFoodAttractionAnimations(frameTime) {
+  if (foodAttractionAnimations.length === 0) {
+    return;
+  }
+
+  const now = Date.now();
+  syncFoodAttractionAnimations(now);
+
+  foodAttractionAnimations.forEach((animation, index) => {
+    const player = getPlayerById(animation.playerId);
+
+    if (!player || player.segments.length === 0) {
+      return;
+    }
+
+    const head = player.segments[0];
+    const targetX = head.x * CELL_SIZE + CELL_SIZE / 2;
+    const targetY = head.y * CELL_SIZE + CELL_SIZE / 2;
+    const progress = Math.min(1, (now - animation.createdAt) / FOOD_ATTRACTION_ANIMATION_MS);
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const currentX = animation.startX + (targetX - animation.startX) * easedProgress;
+    const currentY = animation.startY + (targetY - animation.startY) * easedProgress;
+    const pulse = 0.5 + Math.sin(frameTime / 160 + index) * 0.5;
+
+    ctx.save();
+    ctx.strokeStyle = toRgba(POWER_UPS.magnet.fill, 0.32 * (1 - easedProgress));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(currentX, currentY);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+
+    const glow = ctx.createRadialGradient(currentX, currentY, 2, currentX, currentY, CELL_SIZE * 0.52);
+    glow.addColorStop(0, currentTheme.foodHighlight);
+    glow.addColorStop(0.5, currentTheme.foodCore);
+    glow.addColorStop(1, toRgba(currentTheme.foodCore, 0));
+
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(currentX, currentY, CELL_SIZE * (0.36 + pulse * 0.03), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawMagnetField(player, frameTime) {
+  if (!isMagnetActive(player)) {
+    return;
+  }
+
+  const head = player.segments[0];
+  const centerX = head.x * CELL_SIZE + CELL_SIZE / 2;
+  const centerY = head.y * CELL_SIZE + CELL_SIZE / 2;
+  const pulse = 0.5 + Math.sin(frameTime / 180 + (player.id === "B" ? 0.9 : 0)) * 0.5;
+  const fieldSize = CELL_SIZE * 3 - 6;
+  const fieldX = centerX - fieldSize / 2;
+  const fieldY = centerY - fieldSize / 2;
+
+  ctx.save();
+  ctx.strokeStyle = toRgba(POWER_UPS.magnet.fill, 0.32 + pulse * 0.18);
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 6]);
+  roundRectPath(fieldX, fieldY, fieldSize, fieldSize, 16);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, CELL_SIZE * (0.72 + pulse * 0.05), 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1377,6 +1539,7 @@ function drawSnake(player, frameTime) {
     ctx.restore();
 
     if (index === 0) {
+      drawMagnetField(player, frameTime);
       drawSnakeEyes(segment, player.direction, skinTheme);
       drawPlayerBadge(player, segment, skinTheme);
     }
@@ -1453,6 +1616,7 @@ function draw(frameTime) {
   drawFood(frameTime);
   drawPowerUp(frameTime);
   players.forEach((player) => drawSnake(player, frameTime));
+  drawFoodAttractionAnimations(frameTime);
 
   if (!hasStarted && !gameRunning && !gameOver) {
     const subtitle = gameMode === "single"
