@@ -43,7 +43,7 @@ const DEFAULT_PLAYER_SKINS = {
   A: "future",
   B: "ember"
 };
-const GROWTH_MODE_DURATION_MS = 90 * 1000;
+const GROWTH_MODE_DURATION_MS = 60 * 1000;
 const FUN_ITEM_LIFETIME_MS = 10 * 1000;
 const FUN_ITEM_RESPAWN_MS = 3500;
 const MAGNET_EFFECT_DURATION_MS = 15000;
@@ -70,13 +70,6 @@ const POWER_UPS = {
     fill: "#ff92df",
     glow: "rgba(255, 146, 223, 0.86)",
     text: "#4b1745"
-  },
-  plusFive: {
-    symbol: "+5",
-    label: "加五球",
-    fill: "#8cff9e",
-    glow: "rgba(140, 255, 158, 0.86)",
-    text: "#173e20"
   },
   halve: {
     symbol: "-50%",
@@ -470,11 +463,11 @@ function updateTips() {
     `;
   } else {
     if (versusRule === "growth") {
-      modeDescriptionEl.textContent = "发育模式限时一分半，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
-      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分半倒计时内尽量发育。";
+      modeDescriptionEl.textContent = "发育模式限时一分钟，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分钟倒计时内尽量发育。";
       tipsListEl.innerHTML = `
         <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
-        <li>限时一分半，时间到按当前蛇身长度判定胜负。</li>
+        <li>限时一分钟，时间到按当前蛇身长度判定胜负。</li>
         <li>若途中撞到边界、自己身体或对方身体，会立刻判对方获胜。</li>
       `;
       return;
@@ -487,7 +480,6 @@ function updateTips() {
         <li>加速球“+”：提升全场速度 1 档，达到疾速档位后不再继续提升。</li>
         <li>减速球“-”：降低全场速度 1 档，达到悠闲档位后不再继续降低。</li>
         <li>磁石“U”：开启 15 秒磁场，自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
-        <li>加五球“+5”：让自己立刻增加 5 格长度。</li>
         <li>减半球“-50%”：让对手当前蛇身长度减半，奇数长度会向上取整。</li>
       `;
       return;
@@ -1007,14 +999,6 @@ function applyPowerUpEffect(player, eatenFoodIndexes, now) {
     };
   }
 
-  if (activePowerUp.type === "plusFive") {
-    return {
-      extraGrowth: 5,
-      instantGrowth: true,
-      halveTargetId: null
-    };
-  }
-
   return {
     extraGrowth: 0,
     instantGrowth: false,
@@ -1390,9 +1374,7 @@ function drawPowerUp(frameTime) {
   ctx.textBaseline = "middle";
   ctx.font = activePowerUp.type === "halve"
     ? "800 11px 'Segoe UI', sans-serif"
-    : activePowerUp.type === "plusFive"
-      ? "900 14px 'Segoe UI', sans-serif"
-      : "900 18px 'Segoe UI', sans-serif";
+    : "900 18px 'Segoe UI', sans-serif";
   ctx.fillText(powerUpTheme.symbol, centerX, centerY + 0.5);
   ctx.restore();
 }
