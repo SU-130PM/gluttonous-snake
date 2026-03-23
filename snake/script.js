@@ -46,7 +46,7 @@ const DEFAULT_PLAYER_SKINS = {
 const GROWTH_MODE_DURATION_MS = 60 * 1000;
 const FUN_ITEM_LIFETIME_MS = 10 * 1000;
 const FUN_ITEM_RESPAWN_MS = 3500;
-const MAGNET_EFFECT_DURATION_MS = 15000;
+const MAGNET_EFFECT_DURATION_MS = 8 * 1000;
 const FOOD_ATTRACTION_ANIMATION_MS = 420;
 const SPEED_LEVELS = [165, 130, 100, 75];
 const POWER_UPS = {
@@ -70,6 +70,13 @@ const POWER_UPS = {
     fill: "#ff92df",
     glow: "rgba(255, 146, 223, 0.86)",
     text: "#4b1745"
+  },
+  plusFive: {
+    symbol: "+5",
+    label: "加五球",
+    fill: "#8cff9e",
+    glow: "rgba(140, 255, 158, 0.86)",
+    text: "#173e20"
   },
   halve: {
     symbol: "-50%",
@@ -242,15 +249,23 @@ function sanitizeMode(modeName) {
 }
 
 function sanitizeVersusRule(ruleName) {
-  return ["classic", "growth", "fun"].includes(ruleName) ? ruleName : DEFAULT_VERSUS_RULE;
+  if (ruleName === "growth" || ruleName === "fun") {
+    return "competitive";
+  }
+
+  return ["classic", "competitive"].includes(ruleName) ? ruleName : DEFAULT_VERSUS_RULE;
+}
+
+function isCompetitiveVersusMode() {
+  return gameMode === "versus" && versusRule === "competitive";
 }
 
 function isGrowthVersusMode() {
-  return gameMode === "versus" && versusRule === "growth";
+  return isCompetitiveVersusMode();
 }
 
 function isFunVersusMode() {
-  return gameMode === "versus" && versusRule === "fun";
+  return isCompetitiveVersusMode();
 }
 
 function getGridColumns() {
@@ -280,10 +295,6 @@ function setFunSpeedTier(nextTier) {
   const clampedTier = Math.max(0, Math.min(SPEED_LEVELS.length - 1, nextTier));
   funSpeedTier = clampedTier;
   speedSelect.value = String(SPEED_LEVELS[clampedTier]);
-}
-
-function setFunSpeedToStandard() {
-  setFunSpeedTier(1);
 }
 
 function getPlayerLength(player) {
@@ -462,24 +473,18 @@ function updateTips() {
       <li>速度会随着分数慢慢提升，越到后面越刺激。</li>
     `;
   } else {
-    if (versusRule === "growth") {
-      modeDescriptionEl.textContent = "发育模式限时一分钟，倒计时结束时谁更长谁获胜；若途中撞墙或撞蛇则会被直接判负。";
-      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分钟倒计时内尽量发育。";
+    if (versusRule === "competitive") {
+      modeDescriptionEl.textContent = "竞技模式限时一分钟，双方要边抢长度边抢道具；五种道具等概率刷新，若途中撞墙或撞蛇则会被直接判负。";
+      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分钟内拼长度也拼道具。";
       tipsListEl.innerHTML = `
         <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
         <li>限时一分钟，时间到按当前蛇身长度判定胜负。</li>
+        <li>五种道具等概率刷新，存在 10 秒，没人吃到就会消失并等待下一次登场。</li>
         <li>若途中撞到边界、自己身体或对方身体，会立刻判对方获胜。</li>
-      `;
-      return;
-    }
-
-    if (versusRule === "fun") {
-      modeDescriptionEl.textContent = "娱乐模式会随机刷出道具，道具存在 10 秒，没人吃到就会消失并等待下一次刷新。";
-      boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，道具会随机登场。";
-      tipsListEl.innerHTML = `
         <li>加速球“+”：提升全场速度 1 档，达到疾速档位后不再继续提升。</li>
         <li>减速球“-”：降低全场速度 1 档，达到悠闲档位后不再继续降低。</li>
-        <li>磁石“U”：开启 15 秒磁场，自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
+        <li>磁石“U”：开启 8 秒磁场，自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
+        <li>加五球“+5”：让自己立刻增加 5 格长度。</li>
         <li>减半球“-50%”：让对手当前蛇身长度减半，奇数长度会向上取整。</li>
       `;
       return;
@@ -632,11 +637,7 @@ function resetRound() {
   nextPowerUpSpawnAt = isFunVersusMode() ? Date.now() + FUN_ITEM_RESPAWN_MS : 0;
   growthTimeRemainingMs = GROWTH_MODE_DURATION_MS;
   growthResumeAt = 0;
-  if (isFunVersusMode()) {
-    setFunSpeedToStandard();
-  } else {
-    setFunSpeedTier(getSelectedSpeedTier());
-  }
+  setFunSpeedTier(getSelectedSpeedTier());
   syncFoodSupply();
   gamePaused = false;
   gameOver = false;
@@ -995,6 +996,14 @@ function applyPowerUpEffect(player, eatenFoodIndexes, now) {
     return {
       extraGrowth: collectMagnetFoods(player, eatenFoodIndexes, now),
       instantGrowth: false,
+      halveTargetId: null
+    };
+  }
+
+  if (activePowerUp.type === "plusFive") {
+    return {
+      extraGrowth: 5,
+      instantGrowth: true,
       halveTargetId: null
     };
   }
@@ -1374,6 +1383,8 @@ function drawPowerUp(frameTime) {
   ctx.textBaseline = "middle";
   ctx.font = activePowerUp.type === "halve"
     ? "800 11px 'Segoe UI', sans-serif"
+    : activePowerUp.type === "plusFive"
+      ? "900 14px 'Segoe UI', sans-serif"
     : "900 18px 'Segoe UI', sans-serif";
   ctx.fillText(powerUpTheme.symbol, centerX, centerY + 0.5);
   ctx.restore();
