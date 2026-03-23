@@ -571,7 +571,9 @@ body {
 
 .skin-picker {
   flex: 1 1 220px;
+  position: relative;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 10px 12px 10px 16px;
@@ -580,6 +582,34 @@ body {
   border: 1px solid var(--skin-picker-border);
   box-shadow: var(--skin-picker-shadow);
   color: var(--ink-soft);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.skin-picker::before {
+  content: "";
+  position: absolute;
+  inset: -16px auto -16px -12px;
+  width: 72px;
+  border-radius: 999px;
+  opacity: 0.26;
+  filter: blur(6px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0));
+}
+
+.skin-picker::after {
+  content: "";
+  position: absolute;
+  inset: 8px auto 8px 8px;
+  width: 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.18));
+  opacity: 0.92;
+}
+
+.skin-picker > * {
+  position: relative;
+  z-index: 1;
 }
 
 .skin-picker span {
@@ -598,6 +628,45 @@ body {
   font: inherit;
   cursor: pointer;
   outline: none;
+}
+
+.skin-note {
+  flex: 1 1 100%;
+  margin-left: 2px;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ink-soft) 80%, white 20%);
+}
+
+.skin-picker[data-skin-preview="candy"]::before,
+.skin-picker[data-skin-preview="candy"]::after {
+  background: linear-gradient(180deg, rgba(255, 122, 205, 0.95), rgba(255, 219, 114, 0.52));
+}
+
+.skin-picker[data-skin-preview="aurora"]::before,
+.skin-picker[data-skin-preview="aurora"]::after {
+  background: linear-gradient(180deg, rgba(121, 244, 255, 0.95), rgba(175, 139, 255, 0.52));
+}
+
+.skin-picker[data-skin-preview="forest"]::before,
+.skin-picker[data-skin-preview="forest"]::after {
+  background: linear-gradient(180deg, rgba(153, 229, 103, 0.94), rgba(90, 212, 175, 0.5));
+}
+
+.skin-picker[data-skin-preview="ember"]::before,
+.skin-picker[data-skin-preview="ember"]::after {
+  background: linear-gradient(180deg, rgba(255, 132, 84, 0.94), rgba(255, 87, 120, 0.52));
+}
+
+.skin-picker[data-skin-preview="ink"]::before,
+.skin-picker[data-skin-preview="ink"]::after {
+  background: linear-gradient(180deg, rgba(244, 242, 233, 0.94), rgba(104, 119, 125, 0.48));
+}
+
+.skin-picker[data-skin-preview="future"]::before,
+.skin-picker[data-skin-preview="future"]::after {
+  background: linear-gradient(180deg, rgba(255, 94, 211, 0.94), rgba(255, 79, 136, 0.52));
 }
 
 .control-row {
