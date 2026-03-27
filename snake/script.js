@@ -53,9 +53,11 @@ const FUN_ITEM_LIFETIME_MS = 10 * 1000;
 const FUN_ITEM_RESPAWN_MS = 3500;
 const MAGNET_EFFECT_DURATION_MS = 8 * 1000;
 const FOOD_ATTRACTION_ANIMATION_MS = 420;
-const SPEED_LEVELS = [165, 130, 100, 75];
-const STANDARD_SPEED_TIER = 1;
+const SPEED_LEVELS = [210, 165, 130, 100, 75];
+const STANDARD_SPEED_TIER = 2;
 const MAX_COMPETITIVE_POWER_UPS = 2;
+const MYSTERY_BOX_SUCCESS_RATE = 0.8;
+const MYSTERY_BOX_PENALTY_LENGTH = 5;
 const POWER_UPS = {
   speedUp: {
     symbol: "+",
@@ -91,6 +93,13 @@ const POWER_UPS = {
     fill: "#ffe17f",
     glow: "rgba(255, 225, 127, 0.86)",
     text: "#5f2f0f"
+  },
+  mysteryBox: {
+    symbol: "?",
+    label: "盲盒",
+    fill: "#9d8dff",
+    glow: "rgba(157, 141, 255, 0.88)",
+    text: "#261653"
   },
   halve: {
     symbol: "-50%",
@@ -590,18 +599,19 @@ function updateTips() {
     `;
   } else {
     if (versusRule === "competitive") {
-      modeDescriptionEl.textContent = "竞技模式限时一分钟，双方要边抢长度边抢道具；六种道具等概率刷新，若途中撞墙或撞蛇则会被直接判负。";
+      modeDescriptionEl.textContent = "竞技模式限时一分钟，双方要边抢长度边抢道具；七种道具等概率刷新，若途中撞墙或撞蛇则会被直接判负。";
       boardCaptionEl.textContent = "A: W A S D，B: ↑ ↓ ← →，一分钟内拼长度也拼道具。";
       tipsListEl.innerHTML = `
         <li>A 使用 W A S D，B 使用方向键，双方同时移动。</li>
         <li>限时一分钟，时间到按当前蛇身长度判定胜负。</li>
-        <li>六种道具等概率刷新，场上会同时维持 1 到 2 颗，存在 10 秒后会消失并等待补位。</li>
+        <li>七种道具等概率刷新，场上会同时维持 1 到 2 颗，存在 10 秒后会消失并等待补位。</li>
         <li>若途中撞到边界、自己身体或对方身体，会立刻判对方获胜。</li>
         <li>加速球“+”：提升全场速度 1 档，达到疾速档位后不再继续提升。</li>
-        <li>减速球“-”：降低全场速度 1 档，达到悠闲档位后不再继续降低。</li>
+        <li>减速球“-”：降低全场速度 1 档，达到宝宝档位后不再继续降低。</li>
         <li>磁石“U”：开启 8 秒磁场，自动吸收蛇头附近 3 x 3 范围内的糖果球。</li>
         <li>加五球“+5”：让自己立刻增加 5 格长度。</li>
         <li>减时球“-5S”：让当前剩余时间立刻减少 5 秒。</li>
+        <li>盲盒：80% 概率均分触发其余六种道具之一，20% 概率让自己体长减少 5 格，最低减到 1。</li>
         <li>减半球“-50%”：让对手当前蛇身长度减半，奇数长度会向上取整。</li>
       `;
       return;
@@ -1047,6 +1057,20 @@ function halvePlayer(targetPlayer) {
   targetPlayer.score = Math.max(0, nextLength - 3);
 }
 
+function shrinkPlayerBy(player, shrinkAmount) {
+  if (!player || shrinkAmount <= 0) {
+    return;
+  }
+
+  const nextLength = player.segments.length <= shrinkAmount
+    ? 1
+    : player.segments.length - shrinkAmount;
+
+  player.segments = player.segments.slice(0, nextLength);
+  player.pendingGrowth = 0;
+  player.score = Math.max(0, nextLength - 3);
+}
+
 function extendPlayerTail(player, extraSegments) {
   if (!player || extraSegments <= 0 || player.segments.length === 0) {
     return;
@@ -1101,6 +1125,29 @@ function syncFoodAttractionAnimations(now = Date.now()) {
   foodAttractionAnimations = foodAttractionAnimations.filter((animation) =>
     now - animation.createdAt <= FOOD_ATTRACTION_ANIMATION_MS
   );
+}
+
+function applyMysteryBoxEffect(player, eatenFoodIndexes, now) {
+  const rewardTypes = Object.keys(POWER_UPS).filter((type) => type !== "mysteryBox");
+
+  if (Math.random() < MYSTERY_BOX_SUCCESS_RATE && rewardTypes.length > 0) {
+    const randomReward = rewardTypes[Math.floor(Math.random() * rewardTypes.length)];
+
+    return applyPowerUpEffect(
+      player,
+      { ...POWER_UPS[randomReward], type: randomReward },
+      eatenFoodIndexes,
+      now
+    );
+  }
+
+  shrinkPlayerBy(player, MYSTERY_BOX_PENALTY_LENGTH);
+  return {
+    extraGrowth: 0,
+    instantGrowth: false,
+    halveTargetId: null,
+    timePenaltyMs: 0
+  };
 }
 
 function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
@@ -1160,6 +1207,10 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       halveTargetId: null,
       timePenaltyMs: reduceGrowthTime(TIME_CUT_POWER_UP_MS, now)
     };
+  }
+
+  if (powerUp.type === "mysteryBox") {
+    return applyMysteryBoxEffect(player, eatenFoodIndexes, now);
   }
 
   return {
@@ -1570,6 +1621,40 @@ function drawPowerUpOrb(powerUp, frameTime) {
   ctx.beginPath();
   ctx.arc(centerX, centerY, coreRadius + 1.5, 0, Math.PI * 2);
   ctx.stroke();
+
+  if (powerUp.type === "mysteryBox") {
+    const boxWidth = CELL_SIZE * 0.44;
+    const boxHeight = CELL_SIZE * 0.32;
+    const lidHeight = CELL_SIZE * 0.1;
+
+    ctx.fillStyle = "#fff8ec";
+    roundRectPath(centerX - boxWidth / 2, centerY - boxHeight / 2 + 2, boxWidth, boxHeight, 4);
+    ctx.fill();
+    ctx.strokeStyle = toRgba(powerUpTheme.text, 0.58);
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff1cf";
+    roundRectPath(centerX - boxWidth / 2, centerY - boxHeight / 2 - lidHeight + 3, boxWidth, lidHeight + 3, 4);
+    ctx.fill();
+
+    ctx.fillStyle = powerUpTheme.text;
+    ctx.fillRect(centerX - 1.25, centerY - boxHeight / 2 - lidHeight + 4, 2.5, boxHeight + lidHeight - 2);
+    ctx.fillRect(centerX - boxWidth / 2 + 2, centerY - 1, boxWidth - 4, 2.5);
+
+    ctx.font = "900 10px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("?", centerX + 0.2, centerY + 0.8);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.beginPath();
+    ctx.arc(centerX + boxWidth * 0.22, centerY - boxHeight * 0.42, 1.7, 0, Math.PI * 2);
+    ctx.arc(centerX + boxWidth * 0.32, centerY - boxHeight * 0.52, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
 
   ctx.fillStyle = powerUpTheme.text;
   ctx.textAlign = "center";
