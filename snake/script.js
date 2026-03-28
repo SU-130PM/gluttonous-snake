@@ -58,6 +58,7 @@ const STANDARD_SPEED_TIER = 2;
 const MAX_COMPETITIVE_POWER_UPS = 2;
 const MYSTERY_BOX_SUCCESS_RATE = 0.8;
 const MYSTERY_BOX_PENALTY_LENGTH = 5;
+const MYSTERY_FLASH_DURATION_MS = 1000;
 const POWER_UPS = {
   speedUp: {
     symbol: "+",
@@ -497,6 +498,7 @@ function createPlayer(config) {
     score: 0,
     pendingGrowth: 0,
     magnetUntil: 0,
+    effectFlash: null,
     skinKey: config.skinKey
   };
 }
@@ -1127,26 +1129,58 @@ function syncFoodAttractionAnimations(now = Date.now()) {
   );
 }
 
+function createMysteryFlashEffect(text, fill, textColor) {
+  return { text, fill, textColor };
+}
+
+function triggerPlayerEffectFlash(player, flashEffect, now = Date.now()) {
+  if (!player || !flashEffect) {
+    return;
+  }
+
+  player.effectFlash = {
+    ...flashEffect,
+    createdAt: now,
+    expiresAt: now + MYSTERY_FLASH_DURATION_MS
+  };
+}
+
+function getPowerUpFlashEffect(powerUpType) {
+  const powerUpTheme = POWER_UPS[powerUpType];
+
+  if (!powerUpTheme) {
+    return null;
+  }
+
+  return createMysteryFlashEffect(powerUpTheme.symbol, powerUpTheme.fill, powerUpTheme.text);
+}
+
 function applyMysteryBoxEffect(player, eatenFoodIndexes, now) {
   const rewardTypes = Object.keys(POWER_UPS).filter((type) => type !== "mysteryBox");
 
   if (Math.random() < MYSTERY_BOX_SUCCESS_RATE && rewardTypes.length > 0) {
     const randomReward = rewardTypes[Math.floor(Math.random() * rewardTypes.length)];
-
-    return applyPowerUpEffect(
+    const rewardResult = applyPowerUpEffect(
       player,
       { ...POWER_UPS[randomReward], type: randomReward },
       eatenFoodIndexes,
       now
     );
+
+    return {
+      ...rewardResult,
+      selfShrinkAmount: 0,
+      flashEffect: getPowerUpFlashEffect(randomReward)
+    };
   }
 
-  shrinkPlayerBy(player, MYSTERY_BOX_PENALTY_LENGTH);
   return {
     extraGrowth: 0,
     instantGrowth: false,
     halveTargetId: null,
-    timePenaltyMs: 0
+    timePenaltyMs: 0,
+    selfShrinkAmount: MYSTERY_BOX_PENALTY_LENGTH,
+    flashEffect: createMysteryFlashEffect("-5", "#ff6f8f", "#fff7fb")
   };
 }
 
@@ -1156,7 +1190,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: 0,
       instantGrowth: false,
       halveTargetId: null,
-      timePenaltyMs: 0
+      timePenaltyMs: 0,
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1166,7 +1202,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: 0,
       instantGrowth: false,
       halveTargetId: null,
-      timePenaltyMs: 0
+      timePenaltyMs: 0,
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1176,7 +1214,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: 0,
       instantGrowth: false,
       halveTargetId: null,
-      timePenaltyMs: 0
+      timePenaltyMs: 0,
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1187,7 +1227,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: collectMagnetFoods(player, eatenFoodIndexes, now),
       instantGrowth: false,
       halveTargetId: null,
-      timePenaltyMs: 0
+      timePenaltyMs: 0,
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1196,7 +1238,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: 5,
       instantGrowth: true,
       halveTargetId: null,
-      timePenaltyMs: 0
+      timePenaltyMs: 0,
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1205,7 +1249,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
       extraGrowth: 0,
       instantGrowth: false,
       halveTargetId: null,
-      timePenaltyMs: reduceGrowthTime(TIME_CUT_POWER_UP_MS, now)
+      timePenaltyMs: reduceGrowthTime(TIME_CUT_POWER_UP_MS, now),
+      selfShrinkAmount: 0,
+      flashEffect: null
     };
   }
 
@@ -1217,7 +1263,9 @@ function applyPowerUpEffect(player, powerUp, eatenFoodIndexes, now) {
     extraGrowth: 0,
     instantGrowth: false,
     halveTargetId: player.id === "A" ? "B" : "A",
-    timePenaltyMs: 0
+    timePenaltyMs: 0,
+    selfShrinkAmount: 0,
+    flashEffect: null
   };
 }
 
@@ -1285,6 +1333,7 @@ function tick() {
   const gridColumns = getGridColumns();
   const growthByPlayer = new Map(players.map((player) => [player.id, 0]));
   const instantGrowthByPlayer = new Map(players.map((player) => [player.id, false]));
+  const pendingSelfShrinkByPlayer = new Map(players.map((player) => [player.id, 0]));
   const powerUpConsumptions = [];
   const pendingHalveTargetIds = [];
 
@@ -1412,7 +1461,7 @@ function tick() {
         return;
       }
 
-      const { extraGrowth, instantGrowth, halveTargetId, timePenaltyMs } = applyPowerUpEffect(
+      const { extraGrowth, instantGrowth, halveTargetId, timePenaltyMs, selfShrinkAmount, flashEffect } = applyPowerUpEffect(
         consumer,
         powerUp,
         eatenFoodIndexes,
@@ -1428,6 +1477,17 @@ function tick() {
 
       if (timePenaltyMs > 0) {
         shouldSyncTimer = true;
+      }
+
+      if (selfShrinkAmount > 0) {
+        pendingSelfShrinkByPlayer.set(
+          consumer.id,
+          pendingSelfShrinkByPlayer.get(consumer.id) + selfShrinkAmount
+        );
+      }
+
+      if (flashEffect) {
+        triggerPlayerEffectFlash(consumer, flashEffect, now);
       }
 
       consumedPowerUpIndexes.add(powerUpIndex);
@@ -1486,6 +1546,12 @@ function tick() {
 
   pendingHalveTargetIds.forEach((targetId) => {
     halvePlayer(getPlayerById(targetId));
+  });
+
+  pendingSelfShrinkByPlayer.forEach((shrinkAmount, playerId) => {
+    if (shrinkAmount > 0) {
+      shrinkPlayerBy(getPlayerById(playerId), shrinkAmount);
+    }
   });
 
   if (eatenFoodIndexes.size > 0) {
@@ -1806,6 +1872,52 @@ function drawPlayerBadge(player, headCell, skinTheme, skinProfile) {
   ctx.restore();
 }
 
+function drawPlayerEffectFlash(player, headCell, frameTime) {
+  if (!player || !player.effectFlash) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (player.effectFlash.expiresAt <= now) {
+    player.effectFlash = null;
+    return;
+  }
+
+  const { text, fill, textColor, createdAt, expiresAt } = player.effectFlash;
+  const duration = Math.max(1, expiresAt - createdAt);
+  const progress = Math.min(1, Math.max(0, (now - createdAt) / duration));
+  const blink = 0.45 + Math.abs(Math.sin(frameTime / 75)) * 0.5;
+  const alpha = (1 - progress * 0.3) * blink;
+  const centerX = headCell.x * CELL_SIZE + CELL_SIZE / 2;
+  const centerY = headCell.y * CELL_SIZE - 12 - progress * 6;
+  const fontSize = text.length >= 4 ? 10 : 12;
+
+  ctx.save();
+  ctx.font = `900 ${fontSize}px 'Segoe UI', sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const textWidth = ctx.measureText(text).width;
+  const pillWidth = Math.max(30, textWidth + 18);
+  const pillHeight = 22;
+  const pillX = centerX - pillWidth / 2;
+  const pillY = centerY - pillHeight / 2;
+
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = toRgba(fill, 0.32);
+  roundRectPath(pillX, pillY, pillWidth, pillHeight, 11);
+  ctx.fill();
+
+  ctx.strokeStyle = toRgba(fill, 0.8);
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.fillStyle = textColor;
+  ctx.fillText(text, centerX, centerY + 0.5);
+  ctx.restore();
+}
+
 function drawSegmentAccent(x, y, size, index, skinProfile, frameTime) {
   const centerX = x + size / 2;
   const centerY = y + size / 2;
@@ -1951,6 +2063,7 @@ function drawSnake(player, frameTime) {
       drawMagnetField(player, frameTime);
       drawSnakeEyes(segment, player.direction, skinTheme, skinProfile);
       drawPlayerBadge(player, segment, skinTheme, skinProfile);
+      drawPlayerEffectFlash(player, segment, frameTime);
     }
   });
 }
